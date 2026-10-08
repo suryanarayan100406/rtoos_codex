@@ -1,0 +1,6 @@
+# Executable baseline; requires locally supplied approved depth checkpoint.
+dense:
+  method: point_fusion
+mesh:
+  method: poisson
+  texture: best_view

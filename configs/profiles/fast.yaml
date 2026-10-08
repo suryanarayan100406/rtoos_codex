@@ -1,0 +1,16 @@
+ingest:
+  target_fps: 2.0
+frameqa:
+  max_keyframes: 150
+dense:
+  method: point_fusion
+  pixel_stride: 8
+  voxel_m: 0.2
+mesh:
+  method: poisson
+  poisson_depth: 8
+  max_vertices: 250000
+  texture: best_view
+  texture_size: 1024
+geo:
+  resolution_m: 1.0

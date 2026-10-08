@@ -1,0 +1,859 @@
+<title>DRISHTI Single-Pass 3D</title>
+<meta name="description" content="Turning one drone flight line into a metric, georeferenced 3D model — the DRISHTI reconstruction system for NTRO." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap" />
+
+<style>
+/* ============ TOKENS — light (survey vellum) on bare :root ============ */
+:root{
+  --bg:#E6E9F1; --bg-2:#DDE2EC;
+  --surface:#FBFCFE; --surface-2:#F1F4FA;
+  --ink:#141D33; --ink-soft:#48546F; --ink-faint:#7B879F;
+  --line:#CDD5E4; --line-soft:#DCE2ED;
+  --accent:#B25E00; --accent-soft:#C67611; --on-accent:#FFF8EE;
+  --cyan:#0C7E79; --cyan-soft:#0E8C86;
+  --good:#2C7A44; --warn:#A96E07; --crit:#BB3E2A;
+  --shadow:0 1px 2px rgba(20,29,51,.06), 0 12px 28px -14px rgba(20,29,51,.22);
+  --shadow-lg:0 2px 4px rgba(20,29,51,.08), 0 30px 60px -22px rgba(20,29,51,.30);
+  /* the hero viewport is a committed instrument panel — dark in BOTH themes */
+  --vp-bg:#080E1B; --vp-bg2:#0C1526; --vp-ink:#C9D5EA; --vp-faint:#6E7C9C;
+  --vp-line:#1B2942; --vp-amber:#FFB53D; --vp-cyan:#48D6C8;
+  color-scheme:light;
+}
+
+/* ============ TOKENS — dark (instrument console) ============ */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#080E1B; --bg-2:#0B1526;
+    --surface:#101A2D; --surface-2:#16233C;
+    --ink:#E9EEF7; --ink-soft:#A9B6D0; --ink-faint:#6C7A99;
+    --line:#233252; --line-soft:#1A273F;
+    --accent:#FFB53D; --accent-soft:#FFC868; --on-accent:#1A1206;
+    --cyan:#48D6C8; --cyan-soft:#6FE4D8;
+    --good:#49C67D; --warn:#F0B429; --crit:#FF6F57;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 30px -16px rgba(0,0,0,.7);
+    --shadow-lg:0 2px 6px rgba(0,0,0,.5), 0 34px 64px -24px rgba(0,0,0,.8);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#080E1B; --bg-2:#0B1526;
+  --surface:#101A2D; --surface-2:#16233C;
+  --ink:#E9EEF7; --ink-soft:#A9B6D0; --ink-faint:#6C7A99;
+  --line:#233252; --line-soft:#1A273F;
+  --accent:#FFB53D; --accent-soft:#FFC868; --on-accent:#1A1206;
+  --cyan:#48D6C8; --cyan-soft:#6FE4D8;
+  --good:#49C67D; --warn:#F0B429; --crit:#FF6F57;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 30px -16px rgba(0,0,0,.7);
+  --shadow-lg:0 2px 6px rgba(0,0,0,.5), 0 34px 64px -24px rgba(0,0,0,.8);
+  color-scheme:dark;
+}
+
+/* ============ BASE ============ */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-weight:450; line-height:1.62; letter-spacing:.002em;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+h1,h2,h3,h4{font-family:"Saira","Saira",system-ui,sans-serif; font-weight:700; line-height:1.05; text-wrap:balance; margin:0; letter-spacing:-.01em}
+p{margin:0}
+a{color:inherit}
+::selection{background:var(--accent); color:var(--on-accent)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:3px}
+
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-feature-settings:"tnum" 1}
+.tnum{font-variant-numeric:tabular-nums}
+
+.wrap{width:min(1180px,92vw); margin-inline:auto}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:.72rem; font-weight:500;
+  letter-spacing:.24em; text-transform:uppercase; color:var(--accent);
+  display:inline-flex; align-items:center; gap:.6em;
+}
+.eyebrow::before{content:""; width:1.8em; height:1px; background:var(--accent); opacity:.7}
+.sect-kicker{color:var(--cyan); }
+.sect-kicker::before{background:var(--cyan)}
+
+section{padding:clamp(3.4rem,8vw,6.4rem) 0; position:relative}
+.lede{font-size:clamp(1.05rem,1.6vw,1.24rem); color:var(--ink-soft); max-width:60ch; line-height:1.6}
+h2.big{font-size:clamp(1.9rem,4.4vw,3rem); margin:.7rem 0 1rem; max-width:20ch}
+h3{font-family:"Saira"; font-size:1.16rem; font-weight:600; letter-spacing:-.005em}
+
+/* ============ HEADER ============ */
+header.nav{
+  position:sticky; top:0; z-index:50;
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  background:color-mix(in srgb, var(--bg) 82%, transparent);
+  border-bottom:1px solid var(--line-soft);
+}
+.nav-in{display:flex; align-items:center; justify-content:space-between; padding:.85rem 0; gap:1rem}
+.brand{display:flex; align-items:center; gap:.7rem; font-family:"Saira"; font-weight:700; letter-spacing:.02em; font-size:1.06rem}
+.brand .glyph{width:26px; height:26px; flex:none}
+.brand small{display:block; font-family:"IBM Plex Mono"; font-weight:400; font-size:.6rem; letter-spacing:.18em; color:var(--ink-faint); text-transform:uppercase; margin-top:1px}
+.nav-right{display:flex; align-items:center; gap:.8rem}
+.chip-ntro{font-family:"IBM Plex Mono"; font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); border:1px solid var(--line); border-radius:100px; padding:.32rem .7rem}
+.tgl{
+  appearance:none; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft);
+  width:34px; height:34px; border-radius:9px; cursor:pointer; display:grid; place-items:center;
+  font-size:.95rem; transition:border-color .2s, color .2s;
+}
+.tgl:hover{border-color:var(--accent); color:var(--accent)}
+@media(max-width:620px){ .chip-ntro{display:none} }
+
+/* ============ HERO ============ */
+.hero{padding-top:clamp(2.4rem,5vw,3.8rem); padding-bottom:clamp(2.6rem,6vw,4.2rem)}
+.hero h1{font-size:clamp(2.4rem,6.6vw,5.1rem); line-height:.98; letter-spacing:-.022em; max-width:15ch}
+.hero h1 em{font-style:normal; color:var(--accent)}
+.hero .lede{margin-top:1.4rem; font-size:clamp(1.05rem,1.7vw,1.28rem)}
+.hero-grid{display:grid; grid-template-columns:1fr; gap:clamp(1.6rem,3vw,2.4rem)}
+
+/* viewport panel */
+.viewport{
+  position:relative; border:1px solid var(--vp-line); border-radius:16px; overflow:hidden;
+  background:radial-gradient(120% 140% at 12% 0%, #0E1A30 0%, var(--vp-bg) 62%);
+  box-shadow:var(--shadow-lg); isolation:isolate;
+}
+.viewport canvas{display:block; width:100%; height:100%}
+.vp-frame{position:absolute; inset:0; pointer-events:none}
+.vp-corner{position:absolute; width:16px; height:16px; border:1.5px solid var(--vp-amber); opacity:.55}
+.vp-corner.tl{top:12px; left:12px; border-right:0; border-bottom:0}
+.vp-corner.tr{top:12px; right:12px; border-left:0; border-bottom:0}
+.vp-corner.bl{bottom:12px; left:12px; border-right:0; border-top:0}
+.vp-corner.br{bottom:12px; right:12px; border-left:0; border-top:0}
+.vp-hud{position:absolute; inset:0; padding:clamp(14px,2.4vw,22px); pointer-events:none; font-family:"IBM Plex Mono"; color:var(--vp-ink)}
+.vp-tl{position:absolute; top:clamp(14px,2.4vw,22px); left:clamp(14px,2.4vw,22px); display:flex; flex-direction:column; gap:.35rem}
+.vp-tag{font-size:.64rem; letter-spacing:.2em; text-transform:uppercase; color:var(--vp-faint)}
+.vp-pass{font-size:.8rem; letter-spacing:.12em; color:var(--vp-ink); display:flex; align-items:center; gap:.5rem}
+.vp-pass .dot{width:7px; height:7px; border-radius:50%; background:var(--vp-cyan); box-shadow:0 0 8px var(--vp-cyan)}
+.vp-tr{position:absolute; top:clamp(14px,2.4vw,22px); right:clamp(14px,2.4vw,22px); text-align:right; display:flex; flex-direction:column; gap:.4rem; align-items:flex-end}
+.cov-bar{width:118px; height:6px; border:1px solid var(--vp-line); border-radius:100px; overflow:hidden; background:rgba(255,255,255,.04)}
+.cov-fill{height:100%; width:0%; background:linear-gradient(90deg,var(--vp-cyan),var(--vp-amber)); transition:width .12s linear}
+.vp-bl{position:absolute; bottom:clamp(14px,2.4vw,22px); left:clamp(14px,2.4vw,22px); font-size:.66rem; color:var(--vp-faint); display:flex; gap:1.1rem; flex-wrap:wrap}
+.vp-bl b{color:var(--vp-ink); font-weight:500}
+.leg{display:inline-flex; align-items:center; gap:.4rem}
+.leg i{width:9px; height:9px; border-radius:2px; display:inline-block}
+.vp-note{margin-top:.8rem; font-size:.76rem; color:var(--ink-faint); font-family:"IBM Plex Mono"; letter-spacing:.02em}
+
+/* stat strip */
+.stats{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); border-radius:14px; overflow:hidden; margin-top:.4rem}
+.stat{background:var(--surface); padding:1.2rem 1.15rem}
+.stat .n{font-family:"Saira"; font-weight:700; font-size:clamp(1.5rem,3vw,2.15rem); line-height:1; letter-spacing:-.02em}
+.stat .n .u{color:var(--accent)}
+.stat .l{margin-top:.5rem; font-size:.82rem; color:var(--ink-soft); line-height:1.4}
+@media(max-width:760px){ .stats{grid-template-columns:repeat(2,1fr)} }
+
+/* ============ generic blocks ============ */
+.block-head{max-width:64ch}
+.cards{display:grid; gap:1.1rem; margin-top:2.2rem}
+.cols-3{grid-template-columns:repeat(3,1fr)}
+.cols-2{grid-template-columns:repeat(2,1fr)}
+.cols-4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:900px){ .cols-3,.cols-4{grid-template-columns:1fr 1fr} }
+@media(max-width:620px){ .cols-2,.cols-3,.cols-4{grid-template-columns:1fr} }
+
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:1.5rem 1.4rem; box-shadow:var(--shadow); position:relative; overflow:hidden;
+}
+.card .tag{font-family:"IBM Plex Mono"; font-size:.72rem; font-weight:500; letter-spacing:.1em; color:var(--accent); text-transform:uppercase}
+.card h3{margin:.7rem 0 .55rem}
+.card p{font-size:.95rem; color:var(--ink-soft)}
+.card.anchor{border-top:3px solid var(--accent)}
+.card.idea .tag{color:var(--cyan)}
+
+.alt{background:var(--bg-2)}
+
+/* pipeline rail */
+.rail-legend{display:flex; gap:1.5rem; flex-wrap:wrap; margin:1.8rem 0 1rem; font-size:.85rem}
+.rail-legend b{font-family:"Saira"}
+.pathtag{display:inline-flex; align-items:center; gap:.5rem; font-family:"IBM Plex Mono"; font-size:.72rem; letter-spacing:.12em; text-transform:uppercase}
+.pathtag i{width:11px; height:11px; border-radius:3px; display:inline-block}
+.rail{display:flex; gap:.7rem; overflow-x:auto; padding:1.1rem .2rem 1.4rem; scroll-snap-type:x proximity}
+.rail::-webkit-scrollbar{height:7px}
+.rail::-webkit-scrollbar-thumb{background:var(--line); border-radius:10px}
+.stage{
+  scroll-snap-align:start; flex:0 0 auto; width:172px; background:var(--surface);
+  border:1px solid var(--line); border-radius:12px; padding:1rem 1rem 1.1rem; position:relative;
+  box-shadow:var(--shadow);
+}
+.stage .sid{font-family:"IBM Plex Mono"; font-weight:600; font-size:1.05rem; letter-spacing:.02em}
+.stage.live .sid{color:var(--cyan)}
+.stage.refine .sid{color:var(--accent)}
+.stage .sn{font-family:"Saira"; font-weight:600; font-size:.98rem; margin-top:.35rem; line-height:1.1}
+.stage .sd{font-size:.8rem; color:var(--ink-soft); margin-top:.5rem; line-height:1.42}
+.stage .tier{position:absolute; top:.85rem; right:.9rem; font-family:"IBM Plex Mono"; font-size:.58rem; letter-spacing:.1em; color:var(--ink-faint); text-transform:uppercase}
+
+/* metric spine diagram */
+.spine{display:grid; grid-template-columns:1.1fr auto 1fr auto 1fr; gap:1rem; align-items:center; margin-top:2rem}
+.spine .ins{display:flex; flex-direction:column; gap:.55rem}
+.pill{background:var(--surface); border:1px solid var(--line); border-radius:9px; padding:.6rem .85rem; font-size:.86rem; box-shadow:var(--shadow); display:flex; align-items:center; gap:.55rem}
+.pill .k{font-family:"IBM Plex Mono"; font-size:.62rem; color:var(--cyan); letter-spacing:.06em}
+.node-fg{background:var(--ink); color:var(--bg); border-radius:13px; padding:1.3rem 1rem; text-align:center; box-shadow:var(--shadow-lg)}
+.node-fg .lbl{font-family:"Saira"; font-weight:700; font-size:1.05rem}
+.node-fg .sub{font-family:"IBM Plex Mono"; font-size:.66rem; letter-spacing:.08em; opacity:.72; margin-top:.35rem}
+.node-out{background:linear-gradient(160deg,var(--accent),var(--accent-soft)); color:var(--on-accent); border-radius:13px; padding:1.15rem 1rem; box-shadow:var(--shadow-lg)}
+.node-out .lbl{font-family:"Saira"; font-weight:700; font-size:1rem; line-height:1.1}
+.node-out .sub{font-size:.76rem; margin-top:.4rem; opacity:.86}
+.arrow{color:var(--ink-faint); font-size:1.3rem; text-align:center; font-family:"IBM Plex Mono"}
+@media(max-width:860px){
+  .spine{grid-template-columns:1fr; gap:.7rem}
+  .arrow{transform:rotate(90deg); padding:.1rem 0}
+}
+
+/* tables */
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); margin-top:2rem; background:var(--surface)}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:.92rem}
+th,td{text-align:left; padding:.85rem 1.05rem; border-bottom:1px solid var(--line-soft)}
+thead th{font-family:"IBM Plex Mono"; font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint); font-weight:500; background:var(--surface-2)}
+tbody tr:last-child td{border-bottom:0}
+td .regime{font-family:"Saira"; font-weight:600}
+td .lv{font-family:"IBM Plex Mono"; color:var(--accent); font-weight:600}
+
+/* reliability ladder */
+.ladder{display:flex; flex-direction:column; gap:.6rem; margin-top:2rem}
+.rung{display:grid; grid-template-columns:64px 1.15fr 1.3fr 1.25fr; gap:1rem; align-items:center;
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--sev,var(--warn));
+  border-radius:11px; padding:.9rem 1.1rem; box-shadow:var(--shadow)}
+.rung .lid{font-family:"Saira"; font-weight:700; font-size:1.15rem; color:var(--sev,var(--warn))}
+.rung .t{font-size:.86rem}
+.rung .b{font-size:.86rem; color:var(--ink-soft)}
+.rung .i{font-size:.84rem; color:var(--ink-soft)}
+.rung .cl{font-family:"IBM Plex Mono"; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); display:block; margin-bottom:.2rem}
+.rung.good{--sev:var(--good)} .rung.warn{--sev:var(--warn)} .rung.acc{--sev:var(--accent)}
+@media(max-width:820px){
+  .rung{grid-template-columns:52px 1fr; row-gap:.5rem}
+  .rung .cl{margin-top:.3rem}
+}
+
+/* honest envelope */
+.envelope{display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin-top:2.2rem}
+@media(max-width:760px){ .envelope{grid-template-columns:1fr} }
+.env-col{border-radius:16px; padding:1.7rem 1.6rem; border:1px solid var(--line); box-shadow:var(--shadow)}
+.env-do{background:color-mix(in srgb,var(--good) 9%,var(--surface)); border-color:color-mix(in srgb,var(--good) 30%,var(--line))}
+.env-dont{background:color-mix(in srgb,var(--crit) 8%,var(--surface)); border-color:color-mix(in srgb,var(--crit) 28%,var(--line))}
+.env-col h3{font-size:1.15rem; display:flex; align-items:center; gap:.6rem; margin-bottom:1rem}
+.env-do h3{color:var(--good)} .env-dont h3{color:var(--crit)}
+.env-col ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.85rem}
+.env-col li{font-size:.94rem; color:var(--ink-soft); padding-left:1.5rem; position:relative; line-height:1.5}
+.env-do li::before{content:"✓"; position:absolute; left:0; color:var(--good); font-weight:700}
+.env-dont li::before{content:"✕"; position:absolute; left:0; color:var(--crit); font-weight:700}
+.env-col li b{color:var(--ink); font-weight:600}
+
+/* competitive */
+.camps{display:grid; grid-template-columns:repeat(3,1fr); gap:1.1rem; margin-top:2.2rem}
+@media(max-width:820px){ .camps{grid-template-columns:1fr} }
+.camp{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:1.4rem 1.35rem; box-shadow:var(--shadow)}
+.camp .who{font-family:"Saira"; font-weight:600; font-size:1.02rem}
+.camp .solves{font-size:.85rem; color:var(--good); margin-top:.5rem}
+.camp .misses{font-size:.85rem; color:var(--ink-soft); margin-top:.35rem}
+.camp .solves b,.camp .misses b{font-family:"IBM Plex Mono"; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; display:block; color:var(--ink-faint); margin-bottom:.15rem; font-weight:500}
+.wedge{margin-top:1.4rem; background:linear-gradient(150deg,var(--ink),color-mix(in srgb,var(--ink) 78%, var(--accent))); color:var(--bg); border-radius:16px; padding:1.8rem; box-shadow:var(--shadow-lg)}
+.wedge .k{font-family:"IBM Plex Mono"; font-size:.68rem; letter-spacing:.2em; text-transform:uppercase; color:var(--accent-soft)}
+.wedge p{font-size:clamp(1.1rem,2vw,1.4rem); font-family:"Saira"; font-weight:600; line-height:1.25; margin-top:.7rem; max-width:34ch}
+.wedge .fine{font-family:"IBM Plex Sans"; font-weight:450; font-size:.9rem; color:color-mix(in srgb,var(--bg) 74%, transparent); margin-top:1rem; max-width:62ch; line-height:1.55}
+
+/* sovereign chips */
+.sov{display:grid; grid-template-columns:repeat(2,1fr); gap:1.1rem; margin-top:2.1rem}
+@media(max-width:760px){ .sov{grid-template-columns:1fr} }
+.sov-row{display:flex; gap:.9rem; align-items:flex-start; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:1.15rem 1.25rem; box-shadow:var(--shadow)}
+.sov-row .ic{flex:none; width:30px; height:30px; border-radius:8px; background:color-mix(in srgb,var(--accent) 16%, var(--surface)); display:grid; place-items:center; color:var(--accent); font-size:.95rem}
+.sov-row h4{font-family:"Saira"; font-size:.98rem; font-weight:600}
+.sov-row p{font-size:.86rem; color:var(--ink-soft); margin-top:.3rem}
+
+/* pack list */
+.pack{display:grid; grid-template-columns:repeat(2,1fr); gap:.6rem 2.4rem; margin-top:2rem}
+@media(max-width:760px){ .pack{grid-template-columns:1fr} }
+.pack .grp{font-family:"IBM Plex Mono"; font-size:.68rem; letter-spacing:.14em; text-transform:uppercase; color:var(--cyan); padding:.7rem 0 .3rem; border-bottom:1px solid var(--line-soft); margin-bottom:.4rem; grid-column:1/-1}
+.doc{display:flex; align-items:baseline; gap:.7rem; padding:.42rem 0; font-size:.93rem; border-bottom:1px solid var(--line-soft)}
+.doc .num{font-family:"IBM Plex Mono"; font-size:.72rem; color:var(--ink-faint); flex:none; width:2.2rem}
+.doc .nm{color:var(--ink); font-weight:500}
+.doc .ds{color:var(--ink-faint); font-size:.82rem}
+
+/* closing */
+.close{background:var(--vp-bg); color:var(--vp-ink); border-radius:20px; padding:clamp(2.4rem,5vw,4rem); text-align:center; box-shadow:var(--shadow-lg); position:relative; overflow:hidden}
+.close::before{content:""; position:absolute; inset:0; background:radial-gradient(80% 120% at 50% -10%, rgba(72,214,200,.14), transparent 60%); pointer-events:none}
+.close .k{font-family:"IBM Plex Mono"; font-size:.7rem; letter-spacing:.22em; text-transform:uppercase; color:var(--vp-amber); position:relative}
+.close h2{font-size:clamp(1.7rem,4vw,2.8rem); color:#fff; margin:1rem auto; max-width:20ch; position:relative}
+.close p{color:var(--vp-ink); max-width:56ch; margin:0 auto; position:relative; opacity:.85}
+.apps{display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center; max-width:62rem; margin:0 auto 2.4rem}
+.apps span{font-family:"IBM Plex Mono"; font-size:.72rem; letter-spacing:.03em; color:var(--ink-soft); background:var(--surface); border:1px solid var(--line); border-radius:100px; padding:.42rem .82rem; box-shadow:var(--shadow)}
+.apps .ah{color:var(--cyan); letter-spacing:.14em; text-transform:uppercase; font-size:.66rem; border:none; background:none; box-shadow:none; padding:.42rem .3rem; align-self:center}
+
+footer{padding:3rem 0 4rem; border-top:1px solid var(--line-soft); margin-top:1rem}
+.foot{display:flex; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; font-size:.82rem; color:var(--ink-faint)}
+.foot .mono{font-size:.72rem; letter-spacing:.04em}
+.foot b{color:var(--ink-soft); font-weight:600}
+
+/* scroll reveal */
+.reveal{opacity:0; transform:translateY(18px); transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1)}
+.reveal.in{opacity:1; transform:none}
+@media(prefers-reduced-motion:reduce){
+  .reveal{opacity:1; transform:none; transition:none}
+  .cov-fill{transition:none}
+  *{scroll-behavior:auto !important}
+}
+</style>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <div class="brand">
+      <svg class="glyph" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <circle cx="16" cy="16" r="14" stroke="var(--accent)" stroke-width="1.4" opacity=".5"/>
+        <path d="M16 3v26M3 16h26" stroke="var(--accent)" stroke-width="1" opacity=".4"/>
+        <circle cx="16" cy="16" r="3.4" fill="var(--accent)"/>
+        <circle cx="16" cy="16" r="7.5" stroke="var(--cyan)" stroke-width="1.2"/>
+      </svg>
+      <span>DRISHTI<small>Single-pass · metric 3D</small></span>
+    </div>
+    <div class="nav-right">
+      <span class="chip-ntro">NTRO · PS-17 · SIH26158</span>
+      <button class="tgl" id="themeBtn" aria-label="Toggle colour theme" title="Toggle theme">◐</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">NTRO · PS-17 (SIH26158) · Software · Drone / Robotics</span>
+        <h1>One pass.<br>One chance.<br>A model you can <em>measure</em>.</h1>
+        <p class="lede">Conventional drone mapping flies a dense grid, lands, and grinds hours of photogrammetry offline. The mission we are built for gives a <strong>single flight line</strong> — so DRISHTI turns one pass into a metric, textured, georeferenced 3D model: a live preview in the air, and the refined model on the ground in minutes.</p>
+      </div>
+
+      <div>
+        <div class="viewport" id="viewport">
+          <canvas id="scene" aria-label="Illustration of a drone making a single pass while a point cloud accretes into a wireframe 3D model behind a sweeping scan line"></canvas>
+          <div class="vp-frame">
+            <span class="vp-corner tl"></span><span class="vp-corner tr"></span>
+            <span class="vp-corner bl"></span><span class="vp-corner br"></span>
+          </div>
+          <div class="vp-hud">
+            <div class="vp-tl">
+              <span class="vp-tag">Live reconstruction</span>
+              <span class="vp-pass"><span class="dot"></span> PASS <span id="passno">01 / 01</span></span>
+              <span class="vp-tag mono" id="coord">28.6139° N · 77.2090° E</span>
+            </div>
+            <div class="vp-tr">
+              <span class="vp-tag">Coverage</span>
+              <div class="cov-bar"><div class="cov-fill" id="covfill"></div></div>
+              <span class="vp-tag mono" id="covtxt">0%</span>
+              <span class="vp-tag mono">82 m AGL</span>
+            </div>
+            <div class="vp-bl">
+              <span class="leg"><i style="background:var(--vp-cyan)"></i> point cloud</span>
+              <span class="leg"><i style="background:var(--vp-amber)"></i> mesh / structure</span>
+              <span class="leg"><b>S0→S5</b> edge live path</span>
+            </div>
+          </div>
+        </div>
+        <p class="vp-note">Illustrative — a single scan line sweeps once; geometry accretes in its wake, never re-flown.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section style="padding-top:0">
+    <div class="wrap">
+      <div class="stats reveal">
+        <div class="stat"><div class="n">1<span class="u">×</span></div><div class="l">flight line — no lawnmower grid, no re-fly</div></div>
+        <div class="stat"><div class="n">≤ 1<span class="u">m</span></div><div class="l">spatial-accuracy target · regions beyond it flagged</div></div>
+        <div class="stat"><div class="n">&lt; 15<span class="u">min</span></div><div class="l">final model for a 10-min video · design target</div></div>
+        <div class="stat"><div class="n">0</div><div class="l">ground control points — metric from GPS + visual scale</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow sect-kicker">The gap</span>
+        <h2 class="big">Multi-pass mapping can't answer a single-pass mission.</h2>
+        <p class="lede">Photogrammetry suites — Pix4D, Metashape, DJI Terra, RealityCapture — are accurate, but they assume a planned survey: 70–80% image overlap flown as a grid, ground control points laid on the site, and hours of offline Structure-from-Motion afterwards. In rapid reconnaissance, disaster response, or a contested corridor, there is one pass and one chance — often with no time or safety margin to place control or re-fly.</p>
+      </div>
+      <div class="cards cols-3">
+        <div class="card reveal"><span class="tag">Assumption 1</span><h3>A dense grid</h3><p>Overlapping multi-angle passes the single mission never gets to fly.</p></div>
+        <div class="card reveal"><span class="tag">Assumption 2</span><h3>Ground control</h3><p>Surveyed targets on the ground for metric accuracy — impractical or unsafe on-site.</p></div>
+        <div class="card reveal"><span class="tag">Assumption 3</span><h3>Hours offline</h3><p>Batch reconstruction after landing — no situational picture while it still matters.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REFRAME / THESIS -->
+  <section>
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow">The reframe</span>
+        <h2 class="big">A single pass is weak on geometry — but rich in signal.</h2>
+        <p class="lede">Short baselines and limited angles starve classical triangulation. But one pass still carries a strong satellite-navigation and temporal signal — and inertial too, when an IMU is aboard — while today's learned priors are strong. DRISHTI is a <strong>prior-assisted, sensor-fused, streaming</strong> reconstruction system — not a classical photogrammetry clone. Three ideas carry the whole design.</p>
+      </div>
+      <div class="cards cols-3">
+        <div class="card idea reveal"><span class="tag">Idea 01</span><h3>Learned geometry beats missing views</h3><p>Feed-forward multi-view models and metric monocular depth supply dense geometry exactly where short baselines break triangulation — each output carrying a per-pixel confidence.</p></div>
+        <div class="card idea reveal"><span class="tag">Idea 02</span><h3>Sensors supply the metric truth</h3><p>A tightly-coupled visual + GNSS factor graph — with IMU, RTK/PPK and baro folded in whenever they're present — fixes scale and georeference from the aircraft, the job ground control points normally do. Only video + GPS are required.</p></div>
+        <div class="card idea reveal"><span class="tag">Idea 03</span><h3>Everything streams, everything degrades</h3><p>A live coarse map on the edge in flight; a refined metric model on the ground in minutes. Every stage emits confidence and has a fallback.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOUR ANCHORS -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow sect-kicker">Design anchors</span>
+        <h2 class="big">Four commitments, repeated at every layer.</h2>
+      </div>
+      <div class="cards cols-4">
+        <div class="card anchor reveal"><span class="tag">A1</span><h3>Prior-assisted geometry</h3><p>Fuse classical multi-view constraints with learned depth &amp; pointmap priors — never triangulation alone.</p></div>
+        <div class="card anchor reveal"><span class="tag">A2</span><h3>Metric spine</h3><p>A visual + GNSS factor graph — IMU, RTK/PPK and baro added when present — yields a metric, georeferenced trajectory without GCPs. The baseline needs only video + GPS.</p></div>
+        <div class="card anchor reveal"><span class="tag">A3</span><h3>Two output paths</h3><p>A Live path (edge, near-real-time) and a Refine path (ground, minutes). The live map survives even if refine is interrupted.</p></div>
+        <div class="card anchor reveal"><span class="tag">A4</span><h3>Reliability spine</h3><p>Every stage emits confidence and has a fallback; output is always a best-effort model <em>plus</em> an uncertainty report.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TIERS + PIPELINE -->
+  <section>
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow">Architecture</span>
+        <h2 class="big">Two coordinated paths across three tiers.</h2>
+        <p class="lede">The <strong>Edge tier</strong> on the UAV (NVIDIA Jetson Orin) runs the Live path <span class="mono">S0–S5</span> — a near-real-time coarse preview plus a coverage-and-quality check while the flight is still useful. The <strong>Ground tier</strong> (RTX-class GPU) runs the Refine path <span class="mono">S6–S10</span> for the accurate, textured, georeferenced deliverables. A <strong>Cloud tier</strong> is optional — never required for a mission, so the system stays air-gap friendly.</p>
+      </div>
+
+      <div class="rail-legend reveal">
+        <span class="pathtag" style="color:var(--cyan)"><i style="background:var(--cyan)"></i> Live path · Edge · near-real-time</span>
+        <span class="pathtag" style="color:var(--accent)"><i style="background:var(--accent)"></i> Refine path · Ground · minutes-scale</span>
+      </div>
+
+      <div class="rail reveal" role="list" aria-label="Pipeline stages S0 to S10">
+        <div class="stage live" role="listitem"><span class="tier">Edge</span><div class="sid">S0</div><div class="sn">Capture &amp; Sync</div><div class="sd">Time-align frames to GPS + metadata on one clock; IMU/baro when present.</div></div>
+        <div class="stage live" role="listitem"><span class="tier">Edge</span><div class="sid">S1</div><div class="sn">Ingest &amp; Frame QA</div><div class="sd">Blur/exposure gating; keyframe selection; optional deblur.</div></div>
+        <div class="stage live" role="listitem"><span class="tier">Edge</span><div class="sid">S2</div><div class="sn">Odometry &amp; Localization</div><div class="sd">Visual odometry + GNSS factor graph (VIO when IMU present) — the metric spine.</div></div>
+        <div class="stage live" role="listitem"><span class="tier">Edge</span><div class="sid">S3</div><div class="sn">Perception &amp; Masking</div><div class="sd">Remove moving objects; label terrain, roads, buildings.</div></div>
+        <div class="stage live" role="listitem"><span class="tier">Edge</span><div class="sid">S4</div><div class="sn">Depth &amp; Geometry</div><div class="sd">Metric depth + feed-forward multi-view, scale-aligned.</div></div>
+        <div class="stage live" role="listitem"><span class="tier">Edge</span><div class="sid">S5</div><div class="sn">Live Fusion</div><div class="sd">Confidence-weighted TSDF → live coarse map (nvblox).</div></div>
+        <div class="stage refine" role="listitem"><span class="tier">Ground</span><div class="sid">S6</div><div class="sn">Global Optimization</div><div class="sd">Bundle adjustment with GNSS/RTK factors; self-calibration.</div></div>
+        <div class="stage refine" role="listitem"><span class="tier">Ground</span><div class="sid">S7</div><div class="sn">Dense Recon &amp; 3DGS</div><div class="sd">Few-shot Gaussian Splatting; occlusion completion, flagged.</div></div>
+        <div class="stage refine" role="listitem"><span class="tier">Ground</span><div class="sid">S8</div><div class="sn">Meshing &amp; Texturing</div><div class="sd">Surface extraction → multi-LOD textured mesh.</div></div>
+        <div class="stage refine" role="listitem"><span class="tier">Ground</span><div class="sid">S9</div><div class="sn">Georeferencing &amp; Semantics</div><div class="sd">Project to UTM + geoid; DSM/DTM; true orthomosaic.</div></div>
+        <div class="stage refine" role="listitem"><span class="tier">Ground</span><div class="sid">S10</div><div class="sn">Export &amp; Serve</div><div class="sd">OBJ · PLY · LAS · GeoTIFF · glTF/GLB · FBX + accuracy report; web/desktop viewer.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METRIC SPINE -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow sect-kicker">Anchor A2 · in detail</span>
+        <h2 class="big">Metric, without ground control points.</h2>
+        <p class="lede">Only <strong>video + GPS + flight metadata</strong> are mandatory. Scale comes from GNSS baselines and visual structure — removing monocular scale ambiguity with no control points — and camera intrinsics are self-calibrated when not supplied. An IMU (acceleration against gravity), RTK/PPK and baro are <strong>optional enhancers</strong> that tighten the solution when present. Georeference comes from GNSS(+RTK/PPK), aligning the local solution to WGS84 and projecting to UTM; robust kernels reject satellite-navigation outliers, and covariance flows all the way into the accuracy report.</p>
+      </div>
+      <div class="spine reveal">
+        <div class="ins">
+          <div class="pill"><span class="k">VIS</span> visual keyframes · required</div>
+          <div class="pill"><span class="k">GNSS</span> satellite factors · required</div>
+          <div class="pill"><span class="k">IMU</span> pre-integration · optional</div>
+          <div class="pill"><span class="k">RTK</span> RTK/PPK · optional</div>
+          <div class="pill"><span class="k">BARO</span> barometer · optional</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node-fg"><div class="lbl">Factor graph</div><div class="sub">GTSAM · iSAM2</div></div>
+        <div class="arrow">→</div>
+        <div class="node-out"><div class="lbl">Metric, georeferenced trajectory</div><div class="sub">+ covariance → Global BA (S6)</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACCURACY -->
+  <section>
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow">Accuracy, stated honestly</span>
+        <h2 class="big">The bar is ≤ 1 m. One number would still be a lie — here are the regimes.</h2>
+        <p class="lede">The official target is <strong>≤ 1 m absolute spatial accuracy</strong>. Accuracy is sensor-configuration-dependent and vertical is the weaker axis, so we report by regime — and <strong>flag any region that would exceed 1 m</strong> rather than hide it behind an average. These are engineering <strong>design targets to be measured</strong> on the event dataset — not certified results.</p>
+      </div>
+      <div class="tbl-wrap reveal">
+        <table class="tnum">
+          <thead><tr><th>Configuration</th><th>Absolute horizontal</th><th>Absolute vertical</th><th>vs ≤ 1 m bar</th><th>GSD ≈80 m AGL</th></tr></thead>
+          <tbody>
+            <tr><td><span class="regime">RTK / PPK</span> <span class="lv">L0</span></td><td>3–8 cm</td><td>5–12 cm</td><td>✅ comfortably</td><td>~2 cm/px</td></tr>
+            <tr><td><span class="regime">GNSS + IMU</span> <span class="lv">L1</span></td><td>0.3–1 m</td><td>0.5–1.5 m</td><td>✅ H · ⚠ flag V &gt; 1 m</td><td>~2 cm/px</td></tr>
+            <tr><td><span class="regime">GPS-only baseline</span> <span class="lv">mandatory inputs</span></td><td>0.5–2 m</td><td>0.8–2.5 m</td><td>target ≤ 1 m · flag &gt; 1 m</td><td>~2 cm/px</td></tr>
+            <tr><td><span class="regime">GPS-denied</span> <span class="lv">L2</span></td><td>georef on re-acquire</td><td>—</td><td>relative-only until re-acquire</td><td>~2 cm/px</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine reveal">The baseline's upper envelope (2–2.5 m) is the degraded-GPS worst case; with nominal GPS, self-calibrated intrinsics and bundle adjustment the design targets sub-metre-to-≤ 1 m. We report the measured value with confidence and flag any region past the 1 m bar — never a blanket "≤ 1 m".</p>
+    </div>
+  </section>
+
+  <!-- RELIABILITY LADDER -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow sect-kicker">Anchor A4 · the ladder</span>
+        <h2 class="big">It degrades. It doesn't die.</h2>
+        <p class="lede">"Never fails" is not a slogan — it's an engineered ladder. Each trigger has a defined behaviour and a known product impact, and the system always emits a best-effort model <em>plus</em> an explicit uncertainty and coverage report. Nothing crashes silently; nothing ships as unflagged garbage.</p>
+      </div>
+      <div class="ladder reveal">
+        <div class="rung good"><div class="lid">L0</div><div class="t"><span class="cl">Trigger</span>All sensors nominal (+RTK)</div><div class="b"><span class="cl">Behaviour</span>Full path</div><div class="i"><span class="cl">Impact</span>Best accuracy (cm)</div></div>
+        <div class="rung good"><div class="lid">L1</div><div class="t"><span class="cl">Trigger</span>No RTK / PPK</div><div class="b"><span class="cl">Behaviour</span>GNSS + IMU + VIO scale</div><div class="i"><span class="cl">Impact</span>Sub-metre absolute, strong relative</div></div>
+        <div class="rung warn"><div class="lid">L2</div><div class="t"><span class="cl">Trigger</span>GNSS dropout (canyon / denied)</div><div class="b"><span class="cl">Behaviour</span>VIO + IMU dead-reckon; re-anchor</div><div class="i"><span class="cl">Impact</span>Local metric map; georef on re-acquire</div></div>
+        <div class="rung warn"><div class="lid">L3</div><div class="t"><span class="cl">Trigger</span>Brief visual loss</div><div class="b"><span class="cl">Behaviour</span>IMU inertial propagation</div><div class="i"><span class="cl">Impact</span>Short gap, flagged high-uncertainty</div></div>
+        <div class="rung warn"><div class="lid">L4</div><div class="t"><span class="cl">Trigger</span>Bad frames (blur / dark)</div><div class="b"><span class="cl">Behaviour</span>Gate out; widen keyframes</div><div class="i"><span class="cl">Impact</span>Coverage holes flagged, not garbage</div></div>
+        <div class="rung warn"><div class="lid">L5</div><div class="t"><span class="cl">Trigger</span>Neural model OOM / fail</div><div class="b"><span class="cl">Behaviour</span>Classical MVS / monocular; lower LOD</div><div class="i"><span class="cl">Impact</span>Reduced fidelity, still valid</div></div>
+        <div class="rung warn"><div class="lid">L6</div><div class="t"><span class="cl">Trigger</span>Edge saturated</div><div class="b"><span class="cl">Behaviour</span>Point-splat preview; defer to ground</div><div class="i"><span class="cl">Impact</span>Live preview simpler; refine unaffected</div></div>
+        <div class="rung acc"><div class="lid">∞</div><div class="t"><span class="cl">Always</span>Every mission</div><div class="b"><span class="cl">Behaviour</span>Store-and-forward + deterministic reprocess</div><div class="i"><span class="cl">Impact</span>Full quality recoverable post-mission</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HONEST ENVELOPE -->
+  <section>
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow">The honest envelope</span>
+        <h2 class="big">What we claim — and what we deliberately don't.</h2>
+        <p class="lede">Credibility is a feature. We would rather win on a promise we can keep than lose on one we can't. This is the line we hold in every document and every demo.</p>
+      </div>
+      <div class="envelope reveal">
+        <div class="env-col env-do">
+          <h3>What DRISHTI claims</h3>
+          <ul>
+            <li><b>Near-real-time live preview</b> on the edge, plus a refined model on the ground — <b>under 15 minutes for a 10-minute video</b> (design target).</li>
+            <li><b>Runs on the mandatory inputs alone</b> — video + GPS + flight metadata — with intrinsics self-calibrated; IMU, RTK/PPK and baro only sharpen it.</li>
+            <li><b>Metric &amp; georeferenced</b> to a <b>≤ 1 m</b> target — centimetre-class with RTK/PPK, sub-metre-to-≤ 1 m GPS-only, flagged wherever it would exceed it.</li>
+            <li><b>Graceful degradation</b> with no single point of failure, and an explicit uncertainty &amp; coverage report.</li>
+            <li><b>Standard deliverables</b> — OBJ · PLY · LAS · GeoTIFF · glTF/GLB · FBX, DSM/DTM &amp; orthomosaic, in a web or desktop viewer.</li>
+          </ul>
+        </div>
+        <div class="env-col env-dont">
+          <h3>What DRISHTI does not claim</h3>
+          <ul>
+            <li>A <b>full 4K textured mesh in hard real time</b> on the drone — the fidelity comes on the ground.</li>
+            <li><b>Survey-grade certification</b> or complete 360° building facades from a single pass.</li>
+            <li><b>Measured</b> geometry for occluded / back-facing surfaces — those are <b>inferred and flagged</b>.</li>
+            <li>A <b>single accuracy figure</b> independent of the sensor configuration flown.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EVALUATION SCORECARD -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow sect-kicker">The official scorecard</span>
+        <h2 class="big">Six weighted criteria. We built for the heaviest first.</h2>
+        <p class="lede">NTRO scores this problem on a fixed rubric. We didn't spread effort evenly — <strong>accuracy, completeness and speed are 70% of the score</strong>, and they map one-to-one onto the metric spine, the coverage report and the two-path pipeline. Nothing here is bolted on to chase points; each criterion is won by a part of the architecture that already had to exist.</p>
+      </div>
+      <div class="tbl-wrap reveal">
+        <table class="tnum">
+          <thead><tr><th>Criterion</th><th>Weight</th><th>How DRISHTI wins it</th></tr></thead>
+          <tbody>
+            <tr><td><b>Reconstruction accuracy</b></td><td>30%</td><td>Anchor <b>A2</b> metric spine — GNSS baselines + visual scale, self-calibrated intrinsics, bundle-adjusted to the ≤ 1 m bar; RTK/PPK + IMU tighten to cm when present, and every over-bar region is flagged.</td></tr>
+            <tr><td><b>Model completeness</b></td><td>20%</td><td>Prior-assisted geometry fills the gaps a single pass leaves; the coverage report names every unseen / low-confidence region instead of hiding it in an average.</td></tr>
+            <tr><td><b>Processing speed</b></td><td>20%</td><td>Anchor <b>A3</b> two paths — a live edge preview <em>during</em> flight, and a ground refine that targets <b>&lt; 15 min for a 10-min video</b>, TensorRT-accelerated.</td></tr>
+            <tr><td><b>Innovation</b></td><td>15%</td><td>Prior-assisted single-pass orchestration — the IP is the pipeline that makes one pass metric and georeferenced, not any single off-the-shelf model.</td></tr>
+            <tr><td><b>Scalability</b></td><td>10%</td><td>Three tiers (edge / ground / cloud), swappable permissively-licensed models, and cloud tiling for scenes larger than one machine.</td></tr>
+            <tr><td><b>User interface</b></td><td>5%</td><td>A web &amp; desktop viewer with in-scene measurement tools and a per-region confidence overlay — the accuracy story made visible.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine reveal">Weights sum to 100%. We optimise for the heavy three without neglecting the light three — the viewer and the scalability story are real, not placeholders.</p>
+    </div>
+  </section>
+
+  <!-- COMPETITIVE -->
+  <section>
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow sect-kicker">Where we fit</span>
+        <h2 class="big">We win the pass no one else flies.</h2>
+        <p class="lede">Three mature camps each solve one axis of the problem — and each leaves the single-pass mission on the table.</p>
+      </div>
+      <div class="camps reveal">
+        <div class="camp"><div class="who">Offline photogrammetry</div><div class="misses"><b>Pix4D · Metashape · DJI Terra · RealityCapture</b></div><div class="solves"><b>Wins</b> Absolute accuracy &amp; polish</div><div class="misses"><b>Needs</b> Multi-pass grid + GCPs + hours offline</div></div>
+        <div class="camp"><div class="who">Real-time SLAM / VIO</div><div class="misses"><b>ORB-SLAM3 · VINS · OpenVINS</b></div><div class="solves"><b>Wins</b> Live pose, on the edge</div><div class="misses"><b>Produces</b> Sparse maps — not a textured metric model</div></div>
+        <div class="camp"><div class="who">NeRF / GS services</div><div class="misses"><b>Luma · Polycam · cloud splatting</b></div><div class="solves"><b>Wins</b> Beautiful dense visuals</div><div class="misses"><b>Not</b> Metric, georeferenced, or offline</div></div>
+      </div>
+      <div class="wedge reveal">
+        <span class="k">The niche no incumbent occupies</span>
+        <p>Single-pass → georeferenced, metric, textured 3D — near-real-time, with graceful degradation.</p>
+        <p class="fine">Honestly: for a <em>planned</em> multi-pass mission with control points, the offline incumbents beat us on absolute accuracy, facade completeness and mesh polish. We don't pretend otherwise — we use them as our offline refinement oracle and benchmark ceiling, and we compete where they structurally can't: one pass, right now, on-site.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SOVEREIGN / SHIP -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow">Built to ship — and to stay sovereign</span>
+        <h2 class="big">Adopt, don't invent. The IP is the orchestration.</h2>
+        <p class="lede">Every model is a swappable block behind a confidence interface — so the fast-moving research field can be tracked without re-architecting, and any component can be retrained on indigenous data. Licensing is a first-class constraint: several state-of-the-art models are non-commercial or exclude military use, so the shipped default is permissive throughout.</p>
+      </div>
+      <div class="sov reveal">
+        <div class="sov-row"><div class="ic">◇</div><div><h4>Permissive by default</h4><p>VGGT's commercial checkpoint excludes military use and MASt3R / UniDepth are non-commercial — so we ship Depth Anything 3, MapAnything, Metric3D v2, gsplat and GLOMAP/COLMAP, keeping the restricted models only as a benchmark reference.</p></div></div>
+        <div class="sov-row"><div class="ic">⛨</div><div><h4>Fully offline / air-gapped</h4><p>No mission requires the cloud. Weights, coordinate grids and the whole toolchain run on a field workstation — a data-residency guarantee, not a hope.</p></div></div>
+        <div class="sov-row"><div class="ic">✦</div><div><h4>NavIC / IRNSS ready</h4><p>Multi-constellation positioning including India's own navigation satellites, with RTK corrections from a sovereign base — reducing reliance on foreign constellations in contested airspace.</p></div></div>
+        <div class="sov-row"><div class="ic">↻</div><div><h4>Deterministic &amp; auditable</h4><p>Store-and-forward recording + pinned, seed-fixed ground reprocess means the same pass yields the same model — every accuracy claim is checkable.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BRIEFING PACK -->
+  <section>
+    <div class="wrap">
+      <div class="block-head reveal">
+        <span class="eyebrow sect-kicker">The briefing pack</span>
+        <h2 class="big">Thirteen documents behind this page.</h2>
+        <p class="lede">This pitch sits on a full technical set — the theory, the pipeline, the stack with licences, the recorded decisions, and a dedicated brief for each of the six research roles.</p>
+      </div>
+      <div class="pack reveal">
+        <span class="grp">Core documents</span>
+        <div class="doc"><span class="num">00</span><span class="nm">Master Overview</span></div>
+        <div class="doc"><span class="num">01</span><span class="nm">Theory</span></div>
+        <div class="doc"><span class="num">02</span><span class="nm">How It Works</span></div>
+        <div class="doc"><span class="num">03</span><span class="nm">Technology Stack</span> <span class="ds">· with licensing posture</span></div>
+        <div class="doc"><span class="num">04</span><span class="nm">Integration</span></div>
+        <div class="doc"><span class="num">05</span><span class="nm">Design Decisions</span> <span class="ds">· 15 ADRs</span></div>
+        <span class="grp">Role briefs</span>
+        <div class="doc"><span class="num">R1</span><span class="nm">3D Reconstruction Lead</span></div>
+        <div class="doc"><span class="num">R2</span><span class="nm">Computer Vision &amp; Video Intelligence</span></div>
+        <div class="doc"><span class="num">R3</span><span class="nm">AI / Deep Learning Research</span></div>
+        <div class="doc"><span class="num">R4</span><span class="nm">Drone &amp; Sensor / Hardware Integration</span></div>
+        <div class="doc"><span class="num">R5</span><span class="nm">Geospatial &amp; Accuracy Research</span></div>
+        <div class="doc"><span class="num">R6</span><span class="nm">Systems &amp; Edge / Compute Optimization</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLOSE -->
+  <section class="alt">
+    <div class="wrap">
+      <div class="apps reveal">
+        <span class="ah">Where one pass pays off</span>
+        <span>Border &amp; strategic mapping</span>
+        <span>Disaster damage assessment</span>
+        <span>Urban planning &amp; smart cities</span>
+        <span>Infrastructure inspection</span>
+        <span>Construction progress</span>
+        <span>Archaeological documentation</span>
+        <span>Digital-twin generation</span>
+        <span>Military recon &amp; mission planning</span>
+      </div>
+      <div class="close reveal">
+        <span class="k">DRISHTI — Drone-based Real-time Imaging for Single-pass High-fidelity Terrain Intelligence</span>
+        <h2>One pass. A model you can measure — and a map of how much to trust it.</h2>
+        <p>Prior-assisted geometry, a sensor-driven metric spine, and a reliability ladder that bends instead of breaking — the single-pass reconstruction system built for the mission that gets one chance.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>DRISHTI · <b>Single-Pass Drone Video → Metric 3D</b> · prepared for NTRO, National Technical Research Organisation</span>
+    <span class="mono">Smart India Hackathon 2026 · design targets to be measured on the event dataset · visuals illustrative</span>
+  </div>
+</footer>
+
+<script>
+/* ---------- theme toggle ---------- */
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn');
+  function cur(){ var t=root.getAttribute('data-theme'); if(t)return t; return matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'; }
+  function paint(){ btn.textContent = cur()==='dark' ? '☾' : '☀'; }
+  try{ var s=localStorage.getItem('drishti-theme'); if(s) root.setAttribute('data-theme',s); }catch(e){}
+  paint();
+  btn.addEventListener('click',function(){
+    var next=cur()==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{ localStorage.setItem('drishti-theme',next); }catch(e){}
+    paint();
+  });
+})();
+
+/* ---------- scroll reveal ---------- */
+(function(){
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var els=document.querySelectorAll('.reveal');
+  if(reduce||!('IntersectionObserver'in window)){ els.forEach(function(e){e.classList.add('in')}); return; }
+  var io=new IntersectionObserver(function(en){en.forEach(function(x){ if(x.isIntersecting){ x.target.classList.add('in'); io.unobserve(x.target); } })},{threshold:.14, rootMargin:'0px 0px -8% 0px'});
+  els.forEach(function(e){io.observe(e)});
+})();
+
+/* ---------- single-pass reconstruction canvas ---------- */
+(function(){
+  var cv=document.getElementById('scene'), vp=document.getElementById('viewport');
+  if(!cv) return;
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var W=0,H=0,DPR=1;
+
+  // scene grid
+  var NX=42, NZ=9;
+  var terr=[]; // [i][j] = height 0..~0.35
+  function terrainH(wx,wz){
+    var h=0;
+    h+=0.09*Math.sin(wx*7.0+0.6);
+    h+=0.05*Math.sin(wx*15.0+wz*3.0);
+    h+=0.045*Math.sin(wz*5.0+1.2);
+    h+=0.085*Math.exp(-Math.pow((wx-0.28)/0.11,2));
+    h+=0.06*Math.exp(-Math.pow((wx-0.66)/0.09,2));
+    return Math.max(0,h)*0.92;
+  }
+  for(var i=0;i<NX;i++){ terr[i]=[]; for(var j=0;j<NZ;j++){ terr[i][j]=terrainH(i/(NX-1), j/(NZ-1)); } }
+  // buildings: {x0,x1,z0,z1,h}
+  var blds=[
+    {x0:0.44,x1:0.53,z0:0.30,z1:0.62,h:0.52},
+    {x0:0.79,x1:0.87,z0:0.22,z1:0.50,h:0.66},
+    {x0:0.135,x1:0.205,z0:0.48,z1:0.74,h:0.40}
+  ];
+
+  var padX,planeW,skewX,baseY,rise,hpx;
+  function layout(){
+    padX=W*0.065; planeW=W*0.70; skewX=W*0.165;
+    baseY=H*0.80; rise=H*0.26; hpx=H*0.42;
+  }
+  function proj(wx,wy,wz){ return [ padX+wx*planeW+wz*skewX, baseY-wz*rise-wy*hpx ]; }
+
+  function resize(){
+    var r=vp.getBoundingClientRect();
+    // keep a pleasing aspect; height driven by width
+    var cssW=r.width, cssH=Math.max(300, Math.min(cssW*0.62, 470));
+    vp.style.height=cssH+'px';
+    DPR=Math.min(window.devicePixelRatio||1, 2);
+    W=cssW; H=cssH;
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    layout();
+    if(reduce) draw(1,1,false);
+  }
+
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function mix(c1,c2,t){ return [Math.round(lerp(c1[0],c2[0],t)),Math.round(lerp(c1[1],c2[1],t)),Math.round(lerp(c1[2],c2[2],t))]; }
+  var CY=[72,214,200], STEEL=[120,158,200], AMB=[255,181,61];
+
+  function draw(scanX, alpha, showScan){
+    ctx.clearRect(0,0,W,H);
+
+    // faint georeference plane (flat, wy=0) — the survey plate, constant
+    ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(72,214,200,0.09)';
+    for(var j=0;j<NZ;j++){ ctx.beginPath(); for(var i=0;i<NX;i++){ var p=proj(i/(NX-1),0,j/(NZ-1)); i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); } ctx.stroke(); }
+    for(var i2=0;i2<NX;i2+=2){ ctx.beginPath(); for(var j2=0;j2<NZ;j2++){ var q=proj(i2/(NX-1),0,j2/(NZ-1)); j2?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); } ctx.stroke(); }
+
+    // reconstructed terrain surface (revealed left of scan), back-to-front
+    for(var j=NZ-1;j>=0;j--){
+      for(var i=0;i<NX;i++){
+        var wx=i/(NX-1), wz=j/(NZ-1);
+        if(wx>scanX) continue;
+        var rev=Math.min(1,(scanX-wx)/0.03);
+        var fresh=Math.max(0,1-(scanX-wx)/0.05);
+        var a=rev*alpha;
+        // wireframe edges to +i and +j neighbours
+        ctx.lineWidth=1;
+        ctx.strokeStyle='rgba(120,158,200,'+(0.20*a)+')';
+        var pp=proj(wx,terr[i][j],wz);
+        if(i+1<NX && (i+1)/(NX-1)<=scanX){ var pr=proj((i+1)/(NX-1),terr[i+1][j],wz); ctx.beginPath(); ctx.moveTo(pp[0],pp[1]); ctx.lineTo(pr[0],pr[1]); ctx.stroke(); }
+        if(j+1<NZ){ var pd=proj(wx,terr[i][j+1],(j+1)/(NZ-1)); ctx.beginPath(); ctx.moveTo(pp[0],pp[1]); ctx.lineTo(pd[0],pd[1]); ctx.stroke(); }
+        // node point
+        var col=mix(STEEL,CY,fresh);
+        ctx.fillStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+(0.75*a+0.15)+')';
+        var rad=fresh>0.4?2.4:1.6;
+        ctx.beginPath(); ctx.arc(pp[0],pp[1],rad,0,6.2832); ctx.fill();
+        if(fresh>0.5){ ctx.fillStyle='rgba(72,214,200,'+(0.5*fresh*alpha)+')'; ctx.beginPath(); ctx.arc(pp[0],pp[1],rad+2.4,0,6.2832); ctx.fill(); }
+      }
+    }
+
+    // buildings — wireframe cuboids, revealed at their centre x
+    for(var b=0;b<blds.length;b++){
+      var B=blds[b], cx=(B.x0+B.x1)/2;
+      if(cx>scanX) continue;
+      var rev=Math.min(1,(scanX-cx)/0.05), fresh=Math.max(0,1-(scanX-cx)/0.08), a=rev*alpha;
+      var col=mix(AMB,[255,181,61],1); // amber
+      var edge='rgba(255,181,61,'+(0.28+0.5*fresh)*a+')';
+      var corners=[
+        proj(B.x0,0,B.z0),proj(B.x1,0,B.z0),proj(B.x1,0,B.z1),proj(B.x0,0,B.z1),
+        proj(B.x0,B.h,B.z0),proj(B.x1,B.h,B.z0),proj(B.x1,B.h,B.z1),proj(B.x0,B.h,B.z1)
+      ];
+      ctx.lineWidth=1.3; ctx.strokeStyle=edge;
+      // verticals
+      for(var c=0;c<4;c++){ ctx.beginPath(); ctx.moveTo(corners[c][0],corners[c][1]); ctx.lineTo(corners[c+4][0],corners[c+4][1]); ctx.stroke(); }
+      // top rect
+      ctx.beginPath(); for(var c2=4;c2<8;c2++){ var pc=corners[c2]; c2>4?ctx.lineTo(pc[0],pc[1]):ctx.moveTo(pc[0],pc[1]); } ctx.closePath(); ctx.stroke();
+      // base rect (fainter)
+      ctx.strokeStyle='rgba(255,181,61,'+(0.14*a)+')';
+      ctx.beginPath(); for(var c3=0;c3<4;c3++){ var pb=corners[c3]; c3?ctx.lineTo(pb[0],pb[1]):ctx.moveTo(pb[0],pb[1]); } ctx.closePath(); ctx.stroke();
+    }
+
+    // scan cone + drone
+    if(showScan){
+      var gf=proj(scanX,0,0), gb=proj(scanX,0,1);
+      var drone=proj(scanX,0.98,0.5);
+      // cone
+      var grd=ctx.createLinearGradient(drone[0],drone[1],(gf[0]+gb[0])/2,(gf[1]+gb[1])/2);
+      grd.addColorStop(0,'rgba(72,214,200,0.02)'); grd.addColorStop(1,'rgba(72,214,200,0.16)');
+      ctx.fillStyle=grd; ctx.beginPath(); ctx.moveTo(drone[0],drone[1]); ctx.lineTo(gf[0],gf[1]); ctx.lineTo(gb[0],gb[1]); ctx.closePath(); ctx.fill();
+      // ground scan line
+      ctx.strokeStyle='rgba(124,240,228,0.9)'; ctx.lineWidth=1.6;
+      ctx.beginPath(); ctx.moveTo(gf[0],gf[1]); ctx.lineTo(gb[0],gb[1]); ctx.stroke();
+      // drone
+      ctx.save();
+      ctx.translate(drone[0],drone[1]);
+      ctx.strokeStyle='rgba(233,238,247,0.95)'; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.moveTo(-9,0); ctx.lineTo(9,0); ctx.stroke();     // arms
+      ctx.beginPath(); ctx.moveTo(0,-2.5); ctx.lineTo(0,3); ctx.stroke();
+      ctx.fillStyle='rgba(255,181,61,0.95)';
+      ctx.beginPath(); ctx.arc(-9,0,2.1,0,6.2832); ctx.arc(9,0,2.1,0,6.2832); ctx.fill();
+      ctx.fillStyle='rgba(233,238,247,0.95)'; ctx.fillRect(-2,-2,4,4);
+      ctx.restore();
+    }
+  }
+
+  // HUD updates
+  var covfill=document.getElementById('covfill'), covtxt=document.getElementById('covtxt'), coord=document.getElementById('coord');
+  var lastHud=0;
+  function hud(scanX){
+    var pct=Math.max(0,Math.min(100,Math.round(scanX*100)));
+    covfill.style.width=pct+'%'; covtxt.textContent=pct+'%';
+    var lat=(28.6139+scanX*0.0021).toFixed(4), lon=(77.2090+scanX*0.0016).toFixed(4);
+    coord.textContent=lat+'° N · '+lon+'° E';
+  }
+
+  var start=null, raf=null;
+  var CYCLE=8200, SCAN=5300, FADE=680;
+  function frame(ts){
+    if(start==null)start=ts;
+    var t=(ts-start)%CYCLE, scanX, alpha=1, showScan=true;
+    if(t<SCAN){ scanX=t/SCAN; }
+    else{ scanX=1; var rem=CYCLE-t; if(rem<FADE){ alpha=rem/FADE; showScan=false; } }
+    draw(scanX,alpha,showScan);
+    if(ts-lastHud>90){ hud(t<SCAN?scanX:1); lastHud=ts; }
+    raf=requestAnimationFrame(frame);
+  }
+
+  resize();
+  window.addEventListener('resize',resize);
+  if(!reduce){ raf=requestAnimationFrame(frame); }
+  else{ hud(1); }
+  // pause when offscreen to save cycles
+  if('IntersectionObserver'in window && !reduce){
+    new IntersectionObserver(function(en){en.forEach(function(x){
+      if(x.isIntersecting){ if(!raf){ start=null; raf=requestAnimationFrame(frame); } }
+      else if(raf){ cancelAnimationFrame(raf); raf=null; }
+    })},{threshold:0}).observe(vp);
+  }
+})();
+</script>

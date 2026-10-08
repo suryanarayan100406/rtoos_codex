@@ -1,0 +1,28 @@
+# Local inputs, checkpoints and generated bundles
+.venv/
+data/
+models/
+runs/
+logs/
+*.mp4
+*.MP4
+*.tlog
+*.safetensors
+*.pt
+*.pth
+
+# Build/cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+/build/
+/dist/
+viewer/node_modules/
+viewer/dist/
+.env
+.env.*
+!.env.example
+output/

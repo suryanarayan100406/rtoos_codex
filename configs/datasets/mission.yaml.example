@@ -1,0 +1,19 @@
+# Template only: supply your actual recording and telemetry.
+# All relative paths resolve from this descriptor's directory.
+name: my-flight
+video: ./flight.mp4
+telemetry:
+  format: dji_srt
+  path: ./flight.srt
+  altitude_datum: unknown  # explicitly unknown, ellipsoidal, or orthometric
+  time_origin_s: null     # SRT clock is already clip-relative
+optional:
+  imu: null
+  baro: null
+  intrinsics: null
+  rtk: null
+crs:
+  mode: derive_from_gps
+  vertical: source
+report:
+  check_points: null

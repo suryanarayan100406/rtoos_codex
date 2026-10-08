@@ -1,0 +1,104 @@
+# Quality-focused upper work budgets for the monitored Kaggle runner.
+# Target ceilings: <=30 GB RAM and <=30 GB VRAM (decimal GB), further limited by
+# measured available memory on ONE GPU, often a 16 GB T4/P100; VRAM is not pooled.
+# These settings are not evidence of memory fit. Poisson's octree, BA, source
+# image dimensions and exports still require actual peak-memory measurement.
+
+ingest:
+  # The runner derives a lower full-flight cadence for sample_frame_budget=1800
+  # when duration metadata is available; unknown duration is not count-bounded.
+  # A positive max_frames would stop decoding early and lose the flight tail.
+  target_fps: 6.0
+  max_frames: 0
+
+frameqa:
+  orb_features: 4000
+  max_keyframes: 600
+  # This is cross-checked ORB image displacement, not geometric parallax.
+  # Admit closer views for overlap while retaining the baseline blur/exposure gates.
+  min_parallax_px: 6.0
+  # The supplied 2 fps sample has ~0.5 s spacing; admit each QA-passing source
+  # frame through the coverage cadence while retaining geometric diagnostics.
+  max_interval_s: 0.5
+
+poses:
+  matcher: sequential
+  overlap: 20
+  min_track_length: 3
+  use_glomap: false
+
+spine:
+  optimize: true
+  ransac_iterations: 1000
+  max_iterations: 200
+
+bundle_adjustment:
+  enabled: true
+  # The existing selector preserves whole tracks and prioritizes camera coverage
+  # and connectivity. These caps bound selected work, not guaranteed convergence.
+  min_track_length: 3
+  max_points: 20000
+  max_observations: 200000
+  max_nfev: 200
+
+depth:
+  # Only a locally supplied, hash-verified permissive V2 Small checkpoint.
+  # Torch's normative full-float32 path is retained, including float32 published
+  # camera-Z depth/confidence maps; no mixed-precision configuration is implied.
+  model: depth_anything_v2_small
+  backend: torch
+  input_long_side: 1036  # 74 * 14; twice the baseline linear inference resolution.
+  max_anchors: 20000
+  # Minimum anchors, inlier/residual/reprojection gates and pixel support radius
+  # inherit the baseline. More candidates never authorize unsupported metric depth.
+
+dense:
+  method: point_fusion
+  pixel_stride: 2
+  voxel_m: 0.05
+  max_points_per_chunk: 250000
+  tile_m: 20.0
+  min_confidence: 0.2
+  # Metric-only, masked observations with valid camera-oriented normals; inherited
+  # depth/jump limits remain unchanged. Chunking is not a total-cloud point cutoff.
+
+masking:
+  # RT-DETR is optional. When its checkpoint is absent, retain uncertain pixels
+  # and label the support unknown instead of discarding the entire frame. A
+  # pathological motion mask is also retained above this fraction.
+  model: null
+  motion_unknown_policy: retain
+  max_motion_exclusion_fraction: 0.50
+
+mesh:
+  method: poisson
+  poisson_depth: 10  # Output caps do not bound the peak Poisson octree allocation.
+  max_input_points: 2000000
+  max_vertices: 1000000
+  texture: best_view
+  texture_size: 8192
+  texture_patch_px: 16
+  texture_candidate_views: 6
+  visibility_long_side: 1536
+  # Actual face cap: min(1000000 // 3, (8192 // 16)^2) = 262144.
+  # UV seams duplicate 3 vertices/face: at most 786432 textured vertices, NOT 1M.
+  # The RGBA uint8 atlas alone is 268435456 bytes; this is not a stage RAM estimate.
+  # Density/support/occlusion filters and transparent unsupported texels stay intact.
+
+geo:
+  resolution_m: 0.20
+  max_cells: 12000000
+  # Reject oversized grids before raster allocation; nodata and ground classification
+  # inherit the baseline. Resolution is a sampling target, not measured accuracy.
+
+semantics:
+  model: null
+  classes: []
+barometer:
+  enabled: false
+  # A dataset can explicitly enable recorded heights with its declared clock.
+  # Optional semantics/barometer never replace mandatory GPS or become required.
+models:
+  offline: true
+compute:
+  device: cuda

@@ -1,0 +1,28 @@
+# Template: replace these paths with your actual attached Kaggle Dataset paths.
+# GB is decimal. RAM/VRAM are separate ceilings, with lower monitored stop budgets.
+dataset: /kaggle/input/drishti-flight/mission.yaml
+resume_bundle: null
+output_root: /kaggle/working/drishti-runs
+run_id: kaggle-quality
+profile: /kaggle/working/drishti/configs/profiles/kaggle_quality.yaml
+registry: /kaggle/input/drishti-models/models.yaml
+model_cache: /kaggle/input/drishti-models
+model_paths:
+  depth_anything_v2_small: /kaggle/input/drishti-models/depth_anything_v2_small
+  rtdetr: /kaggle/input/drishti-models/rtdetr
+gpu_index: 0
+ram_limit_gb: 30.0
+vram_limit_gb: 30.0
+ram_reserve_gb: 3.0
+vram_reserve_gb: 1.0
+gpu_memory_fraction: 0.90
+cpu_threads: 8
+monitor_interval_s: 0.5
+min_system_available_gb: 1.0
+termination_grace_s: 5.0
+smi_timeout_s: 10.0
+report_recovery_timeout_s: 120.0
+sample_frame_budget: 1800
+archive: true
+archive_name: drishti-kaggle-quality.zip
+overrides: []

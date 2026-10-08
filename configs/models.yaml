@@ -1,0 +1,13 @@
+# Populate with locally supplied, licensed checkpoints. No runtime downloads.
+# models:
+#   chosen_name:
+#     path: directory_relative_to_cache
+#     revision: immutable_commit_or_content_revision
+#     license: Apache-2.0
+#     files: {model.safetensors: actual_64_hex_sha256}
+#     runtime: torch
+#     source: upstream_checkpoint_identifier
+#     output_domain: relative_inverse
+# Semantic checkpoints instead require output_domain: semantic_logits and an
+# explicit semantics.classes source-channel mapping; no checkpoint is bundled.
+models: {}

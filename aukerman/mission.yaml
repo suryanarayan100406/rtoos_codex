@@ -1,0 +1,21 @@
+# Dataset descriptor for the supplied Aukerman sample.
+# Paths are relative to this file and are intentionally case-sensitive.
+# The SRT contains absolute-altitude fields, but the source datum is not
+# documented in the supplied provenance, so the pipeline records it as unknown.
+name: aukerman
+video: ./flight.MP4
+telemetry:
+  format: dji_srt
+  path: ./flight.SRT
+  altitude_datum: unknown
+  time_origin_s: null
+optional:
+  imu: null
+  baro: null
+  intrinsics: null
+  rtk: null
+crs:
+  mode: derive_from_gps
+  vertical: source
+report:
+  check_points: null

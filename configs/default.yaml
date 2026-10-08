@@ -1,0 +1,179 @@
+# Paths are relative to this file. Output_root defaults to the caller's runs/.
+run:
+  seed: 1234
+  copy_inputs: true
+ingest:
+  target_fps: 4.0
+  max_frames: 0
+  time_offset_s: 0.0
+  max_telemetry_gap_s: 2.0
+# Optional recorded positive-up relative height, never geographic altitude or pressure.
+# Enabling requires an explicit logged-clock origin; sigma_m is assumed noise,
+# not calibrated accuracy, and is used only when no CSV sigma column is configured.
+barometer:
+  enabled: false
+  time_origin_s: null
+  time_offset_s: 0.0
+  max_time_error_s: 0.1
+  sigma_m: 2.0
+  min_measurements: 3
+  max_samples: 1000000
+  csv:
+    time: timestamp
+    height: height_m
+    sigma: null
+    delimiter: ','
+frameqa:
+  min_sharpness: 30.0
+  max_dark_fraction: 0.6
+  max_bright_fraction: 0.6
+  dark_threshold: 10
+  bright_threshold: 245
+  # Legacy field name; this is the robust post-homography residual proxy,
+  # not cross-checked ORB image displacement.
+  min_parallax_px: 8.0
+  min_geometric_matches: 12
+  homography_ransac_threshold_px: 3.0
+  homography_ransac_iterations: 1000
+  homography_ransac_confidence: 0.995
+  homography_min_inlier_fraction: 0.5
+  geometric_residual_quantile: 0.75
+  min_match_coverage_fraction: 0.125
+  essential_ransac_threshold_px: 1.0
+  essential_ransac_iterations: 1000
+  essential_ransac_confidence: 0.999
+  essential_min_inlier_fraction: 0.5
+  essential_min_positive_depth_fraction: 0.5
+  essential_homography_inlier_margin: 0.05
+  min_angular_parallax_deg: 0.1
+  max_interval_s: 2.0
+  max_keyframes: 300
+  orb_features: 2000
+poses:
+  matcher: sequential
+  overlap: 10
+  camera_model: SIMPLE_RADIAL
+  min_registered: 3
+  min_track_length: 3
+  use_glomap: false
+spine:
+  gnss_sigma_h_m: 3.0
+  gnss_sigma_v_m: 5.0
+  visual_sigma_m: 0.2
+  rotation_sigma_rad: 0.05
+  robust_delta: 1.345
+  alignment_threshold_m: 10.0
+  ransac_iterations: 300
+  min_baseline_m: 1.0
+  min_rank_ratio: 0.001
+  optimize: true
+  max_iterations: 100
+bundle_adjustment:
+  enabled: true
+  reprojection_sigma_px: 1.0
+  min_track_length: 3
+  max_points: 10000
+  max_observations: 100000
+  max_nfev: 100
+  ftol: 0.000001
+  xtol: 0.000001
+  gtol: 0.000001
+  min_depth_m: 0.01
+crs:
+  mode: derive_from_gps
+  epsg: null
+  vertical: source
+  geoid_path: null
+masking:
+  model: rtdetr
+  threshold: 0.5
+  dilation_px: 5
+  dynamic_classes: [person, car, truck, bus, motorcycle, bicycle, bird, dog, cat, horse]
+  motion_fallback: true
+  motion_threshold_px: 3.0
+  min_motion_matches: 16
+  motion_with_detector: true
+  motion_features: 2000
+  motion_quality: 0.01
+  motion_spacing_px: 7.0
+  motion_ransac_iterations: 2000
+  motion_ransac_confidence: 0.99
+  motion_min_inlier_fraction: 0.5
+  flow_window_px: 21
+  flow_levels: 3
+  flow_fb_threshold_px: 1.5
+  flow_pyr_scale: 0.5
+  flow_iterations: 3
+  flow_poly_n: 5
+  flow_poly_sigma: 1.2
+  motion_unknown_policy: exclude
+  max_motion_exclusion_fraction: 1.0
+# Optional: supply a verified local semantic checkpoint and its explicit class map.
+# 0 is reserved for unknown/unmapped/excluded pixels; probabilities are uncalibrated.
+semantics:
+  model: null
+  min_probability: 0.5
+  preview_long_side: 1024
+  classes: []
+depth:
+  model: depth_anything_v2_small
+  backend: torch
+  input_long_side: 518
+  min_anchors: 8
+  robust_delta: 1.345
+  min_depth_m: 0.1
+  max_depth_m: 300.0
+  max_relative_residual: 0.3
+  max_anchors: 10000
+  support_radius_px: 100.0
+  robust_iterations: 20
+  min_inlier_fraction: 0.5
+  max_anchor_reprojection_error_px: 3.0
+dense:
+  method: point_fusion
+  voxel_m: 0.1
+  pixel_stride: 4
+  min_confidence: 0.2
+  max_points_per_chunk: 1000000
+  tile_m: 40.0
+  max_depth_m: 300.0
+  normal_max_relative_jump: 0.1
+mesh:
+  method: poisson
+  poisson_depth: 9
+  density_quantile: 0.05
+  max_vertices: 500000
+  support_radius_m: 0.5
+  texture: best_view
+  texture_size: 2048
+  normal_neighbors: 30
+  max_input_points: 1000000
+  texture_patch_px: 16
+  texture_padding_px: 1
+  visibility_long_side: 1024
+  texture_occlusion_tolerance_m: 0.1
+  texture_candidate_views: 4
+geo:
+  resolution_m: 0.5
+  max_cells: 20000000
+  ground_method: morphological
+  ground_window_m: 10.0
+  ground_threshold_m: 0.5
+  nodata: -9999.0
+export:
+  formats: [obj, ply, las, geotiff, glb, gltf, fbx]
+  optional_formats: [laz, 3dtiles, potree]
+  blender: blender
+  las_scale_m: 0.001
+report:
+  check_points: null
+  accuracy_target_m: 1.0
+  region_size_m: 20.0
+models:
+  registry: models.yaml
+  cache_dir: ../models
+  offline: true
+compute:
+  device: auto
+  openvino_device: CPU
+  environment: null

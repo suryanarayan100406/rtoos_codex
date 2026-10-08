@@ -1,0 +1,7 @@
+REAL open aerial dataset assembled by scripts/make_sample_dataset.py
+Source repo : https://github.com/OpenDroneMap/odm_data_aukerman
+Note        : Farmstead: house + barn + fields (real BUILDINGS).
+Images used : 77 JPEGs carrying GPS EXIF (of 77 found)
+Assembly    : real pixels + real per-image GPS, muxed into MP4 @ 2 fps + DJI-style SRT.
+              Only playback timing is synthesized; imagery & coordinates are the source's own.
+Terms       : OpenDroneMap community example dataset - verify the source repo before redistributing.

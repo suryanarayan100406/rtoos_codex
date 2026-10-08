@@ -1,0 +1,64 @@
+# Highest-quality local profile. This intentionally removes the Kaggle runner's
+# sampled resource policy, but physical RAM/VRAM and algorithmic limits still
+# exist. It never turns unsupported relative depth or unknown masking into
+# measured geometry.
+ingest:
+  target_fps: 8.0
+  max_frames: 0
+frameqa:
+  orb_features: 8000
+  max_keyframes: 1200
+  min_parallax_px: 6.0
+  max_interval_s: 0.25
+poses:
+  matcher: sequential
+  overlap: 30
+  min_track_length: 3
+  use_glomap: false
+spine:
+  optimize: true
+  ransac_iterations: 3000
+  max_iterations: 500
+bundle_adjustment:
+  enabled: true
+  min_track_length: 3
+  max_points: 50000
+  max_observations: 500000
+  max_nfev: 500
+depth:
+  model: depth_anything_v2_small
+  backend: torch
+  input_long_side: 1536
+  max_anchors: 50000
+  min_anchors: 6
+  support_radius_px: 120.0
+  robust_iterations: 30
+dense:
+  method: point_fusion
+  pixel_stride: 1
+  voxel_m: 0.025
+  max_points_per_chunk: 500000
+  tile_m: 10.0
+  min_confidence: 0.15
+mesh:
+  method: poisson
+  poisson_depth: 12
+  max_input_points: 5000000
+  max_vertices: 2000000
+  texture: best_view
+  texture_size: 16384
+  texture_patch_px: 16
+  texture_candidate_views: 8
+  visibility_long_side: 2048
+geo:
+  resolution_m: 0.10
+  max_cells: 50000000
+masking:
+  model: null
+  motion_fallback: true
+  motion_unknown_policy: retain
+  max_motion_exclusion_fraction: 0.50
+models:
+  offline: true
+compute:
+  device: auto
